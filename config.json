@@ -1,0 +1,6 @@
+{
+    "data" : {
+        "ball_to_ball" : "./data/ball_to_ball/deliveries.csv",
+        "match_data" : "./data/match_id/matches.csv"
+    }
+}
