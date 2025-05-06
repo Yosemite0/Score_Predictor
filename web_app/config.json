@@ -1,0 +1,4 @@
+{
+    "MODEL_PATH_LSTM": "../best_ipl_model.pth",
+    "MODEL_PATH_LR": "../best_ipl_model_lr.pth"
+}
