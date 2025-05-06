@@ -1,6 +1,44 @@
 {
-    "data" : {
-        "ball_to_ball" : "./data/ball_to_ball/deliveries.csv",
-        "match_data" : "./data/match_id/matches.csv"
-    }
+    "model_params": {
+        "input_size": 7,
+        "hidden_size": 64,
+        "num_layers": 2,
+        "dropout": 0.3,
+        "output_size": 2
+    },
+    "training_params": {
+        "learning_rate": 0.001,
+        "batch_size": 32,
+        "epochs": 50,
+        "patience": 10,
+        "sequence_mode": true,
+        "runs_weight": 1.0,
+        "wicket_weight": 1.0
+    },
+    "feature_info": {
+        "numerical_features": [
+            "over",
+            "curr_run_rate",
+            "req_runrate",
+            "target_left",
+            "weighted_run_rate"
+        ],
+        "team_classes": [
+            "Chennai Super Kings",
+            "Delhi Capitals",
+            "Gujarat Lions",
+            "Gujarat Titans",
+            "Kochi Tuskers Kerala",
+            "Kolkata Knight Riders",
+            "Lucknow Super Giants",
+            "Mumbai Indians",
+            "Pune Warriors",
+            "Punjab Kings",
+            "Rajasthan Royals",
+            "Rising Pune Supergiant",
+            "Royal Challengers Bengaluru",
+            "Sunrisers Hyderabad"
+        ]
+    },
+    "date_created": "2025-05-07 04:04:34"
 }
