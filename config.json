@@ -1,10 +1,21 @@
 {
-    "model_params": {
+    "model_paths": {
+        "lstm": "best_ipl_model.pth",
+        "lr": "lr_model.pkl"
+    },
+    "model_settings": {
         "input_size": 7,
         "hidden_size": 64,
         "num_layers": 2,
         "dropout": 0.3,
         "output_size": 2
+    },
+    "safe_globals": {
+        "allowed_classes": ["sklearn.preprocessing._data.StandardScaler", "sklearn.preprocessing._label.LabelEncoder"]
+    },
+    "data_paths": {
+        "processed_data": "cleaned_data/weighted_run_rate_dataset.csv",
+        "raw_data": "cleaned_data/updated_over_by_over_data_set.csv"
     },
     "training_params": {
         "learning_rate": 0.001,

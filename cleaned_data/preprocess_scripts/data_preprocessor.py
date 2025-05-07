@@ -1,122 +1,127 @@
-# import pandas as pd
-
-# # # Load the datasets
-# # ball_by_ball_df = pd.read_csv('cleaned_data/data_set_standardized.csv')
-# # match_df = pd.read_csv('cleaned_data/match_standardized.csv')
-
-# # # Rename 'id' in match_df to 'match_id' for merging
-# # match_df = match_df.rename(columns={'id': 'match_id'})
-
-# # # Select relevant columns from match_df: season, toss_winner, toss_decision, team1, team2
-# # match_subset = match_df[['match_id', 'season', 'toss_winner', 'toss_decision', 'team1', 'team2']]
-
-# # # Merge the datasets on match_id
-# # merged_df = ball_by_ball_df.merge(match_subset, on='match_id', how='left')
-
-# # # Compute who_is_batting_first
-# # # If toss_decision is 'bat', who_is_batting_first is toss_winner
-# # # If toss_decision is 'field', who_is_batting_first is the other team
-# # merged_df['who_is_batting_first'] = merged_df.apply(
-# #     lambda row: row['toss_winner'] if row['toss_decision'] == 'bat'
-# #     else (row['team1'] if row['toss_winner'] == row['team2'] else row['team2']),
-# #     axis=1
-# # )
-
-# # # Drop temporary columns used for computation (team1, team2, toss_winner, toss_decision)
-# # merged_df = merged_df.drop(columns=['team1', 'team2', 'player_dismissed',
-# #        'dismissal_kind', 'fielder', 'batter', 'bowler', 'non_striker', 'batsman_runs', 'extra_runs', 'extras_type', 'toss_winner', 'toss_decision'])
-
-# # # Save the modified dataset
-# # merged_df.to_csv('cleaned_data/modified_data_set.csv', index=False)
-
-# # # Display the first few rows to verify
-# # print(merged_df.head())
-
-
-# # df = pd.read_csv('cleaned_data/modified_data_set.csv')
-# # print(df.columns)
-# # print(df.head())
-
-
-
-# # import pandas as pd
-
-# # Load the modified dataset
-# df = pd.read_csv('cleaned_data/modified_data_set.csv')
-
-# # Group by match_id, inning, batting_team, bowling_team, over, season, and who_is_batting_first
-# # Aggregate total_runs (sum) and is_wicket (sum for wickets per over)
-# over_by_over_df = df.groupby(
-#     ['match_id', 'inning', 'batting_team', 'bowling_team', 'over', 'season', 'who_is_batting_first'],
-#     as_index=False
-# ).agg({
-#     'total_runs': 'sum',  # Sum of runs in the over
-#     'is_wicket': 'sum'    # Count of wickets in the over
-# })
-
-# # Sort the dataframe for better readability
-# over_by_over_df = over_by_over_df.sort_values(['match_id', 'inning', 'over'])
-
-# # Save the over-by-over dataset
-# over_by_over_df.to_csv('over_by_over_data_set.csv', index=False)
-
-# # Display the first few rows to verify
-# print(over_by_over_df.head())
-
-
-
-
-
 import pandas as pd
 
-# Load the over-by-over dataset
-df = pd.read_csv('cleaned_data/over_by_over_data_set.csv')
+def derive_features_from_ball_data(deliveries_df, matches_df):
+    """Derive all required features from ball-by-ball data.
+    
+    Args:
+        deliveries_df: DataFrame containing ball-by-ball data
+        matches_df: DataFrame containing match metadata
+    
+    Returns:
+        DataFrame with derived features for each over
+    """
+    # Merge match data with deliveries
+    df = pd.merge(deliveries_df, matches_df[['id', 'season', 'date', 'team1', 'team2']], 
+                 left_on='match_id', right_on='id')
+    
+    # Group by match_id, inning, over to get per-over statistics
+    over_stats = df.groupby(['match_id', 'inning', 'over']).agg(
+        total_runs=('total_runs', 'sum'),
+        is_wicket=('is_wicket', 'sum'),
+        batting_team=('batting_team', 'first'),
+        bowling_team=('bowling_team', 'first'),
+        season=('season', 'first')
+    ).reset_index()
 
-# Step 1: Make over 1-indexed by adding 1
-df['over'] = df['over'] + 1
+    # Sort by match_id, inning, over for sequential processing
+    over_stats = over_stats.sort_values(['match_id', 'inning', 'over'])
+    
+    # Calculate cumulative statistics
+    result = []
+    for (match_id, inning), group in over_stats.groupby(['match_id', 'inning']):
+        cum_runs = 0
+        cum_wickets = 0
+        weighted_rr = 0
+        alpha = 0.7  # Weight for weighted run rate calculation
+        
+        for _, row in group.iterrows():
+            # Update cumulative stats
+            cum_runs += row['total_runs']
+            cum_wickets += row['is_wicket']
+            
+            # Calculate run rates
+            current_run_rate = row['total_runs']  # Runs in current over
+            run_rate = cum_runs / row['over'] if row['over'] > 0 else 0
+            
+            # Calculate weighted run rate
+            if row['over'] == 1:
+                weighted_rr = current_run_rate
+            else:
+                weighted_rr = alpha * current_run_rate + (1-alpha) * weighted_rr
+            
+            # Get target and required run rate for second innings
+            target = 0
+            target_left = 0
+            req_runrate = 0
+            
+            if inning == 2:
+                # Get first innings total
+                first_inning = over_stats[(over_stats['match_id'] == match_id) & 
+                                        (over_stats['inning'] == 1)]
+                if not first_inning.empty:
+                    target = first_inning['total_runs'].sum() + 1
+                    target_left = target - cum_runs
+                    remaining_overs = 20 - row['over']
+                    req_runrate = target_left / remaining_overs if remaining_overs > 0 else 99.99
+            
+            # Store over summary
+            result.append({
+                'match_id': match_id,
+                'inning': inning,
+                'over': row['over'],
+                'batting_team': row['batting_team'],
+                'bowling_team': row['bowling_team'],
+                'season': row['season'],
+                'total_runs': row['total_runs'],
+                'is_wicket': row['is_wicket'],
+                'cum_runs': cum_runs,
+                'cum_wickets': cum_wickets,
+                'run_rate': run_rate,
+                'curr_run_rate': current_run_rate,
+                'weighted_run_rate': weighted_rr,
+                'target': target,
+                'target_left': target_left,
+                'req_runrate': req_runrate
+            })
+    
+    # Convert to DataFrame
+    result_df = pd.DataFrame(result)
+    
+    # Add 'is_powerplay' feature (first 6 overs)
+    result_df['is_powerplay'] = result_df['over'] <= 6
+    
+    # Add 'balls_remaining' feature
+    result_df['balls_remaining'] = (20 - result_df['over']) * 6
+    
+    # Add next over stats for training (shifted by 1 within each match-inning)
+    result_df['next_over_runs'] = result_df.groupby(['match_id', 'inning'])['total_runs'].shift(-1)
+    result_df['next_over_wickets'] = result_df.groupby(['match_id', 'inning'])['is_wicket'].shift(-1)
+    
+    # Drop last over of each innings (no next over to predict)
+    result_df = result_df.dropna(subset=['next_over_runs', 'next_over_wickets'])
+    
+    return result_df
 
-# Step 2: Compute cumulative runs per match and inning to calculate run_rate
-df['cumulative_runs'] = df.groupby(['match_id', 'inning'])['total_runs'].cumsum()
-
-# Calculate run_rate: cumulative runs / number of overs (over is now 1-indexed)
-df['run_rate'] = df['cumulative_runs'] / df['over']
-
-# Step 3: Compute target runs for second inning
-# First, get total runs for inning 1 for each match
-inning1_runs = df[df['inning'] == 1].groupby('match_id')['total_runs'].sum().reset_index()
-inning1_runs.rename(columns={'total_runs': 'target_runs'}, inplace=True)
-
-# Merge target runs into the main dataframe
-df = df.merge(inning1_runs, on='match_id', how='left')
-
-# For inning 1, target_runs is NaN (not applicable); for inning 2, it’s the total from inning 1
-# Add 1 to target_runs for inning 2 (since target is the score to beat)
-df.loc[df['inning'] == 2, 'target_runs'] = df['target_runs'] + 1
-df.loc[df['inning'] == 1, 'target_runs'] = 0  # Not applicable for inning 1
-
-# Step 4: Compute target_left (only for inning 2)
-df['target_left'] = 0  # Default for inning 1
-df.loc[df['inning'] == 2, 'target_left'] = df['target_runs'] - df['cumulative_runs']
-df.loc[df['target_left'] < 0, 'target_left'] = 0  # If target is achieved, set to 0
-
-# Step 5: Compute req_runrate (only for inning 2)
-# Assume 20 overs per inning for T20; remaining overs = 20 - current over
-df['req_runrate'] = 0  # Default for inning 1
-df.loc[df['inning'] == 2, 'req_runrate'] = df['target_left'] / (20 - df['over'] + 1)
-df.loc[df['inning'] == 2, 'req_runrate'] = df['req_runrate'].clip(lower=0)  # No negative run rates
-df.loc[df['over'] == 20, 'req_runrate'] = 0  # Last over, no required run rate
-
-# Drop temporary columns
-df = df.drop(columns=['cumulative_runs'])
-
-# Sort the dataframe for readability
-df = df.sort_values(['match_id', 'inning', 'over'])
-
-# Save the updated dataset
-df.to_csv('updated_over_by_over_data_set.csv', index=False)
-
-# Display the first few rows to verify
-print(df.head())
+def process_ball_by_ball_data(deliveries_path='data/ball_to_ball/deliveries.csv',
+                            matches_path='data/match_id/matches.csv',
+                            output_path='cleaned_data/match_standardized.csv'):
+    """Process ball-by-ball data to create the final dataset."""
+    
+    # Load data
+    deliveries = pd.read_csv(deliveries_path)
+    matches = pd.read_csv(matches_path)
+    
+    # Derive features
+    processed_df = derive_features_from_ball_data(deliveries, matches)
+    
+    # Save processed data
+    processed_df.to_csv(output_path, index=False)
+    print(f"Processed data saved to {output_path}")
+    print(f"Dataset shape: {processed_df.shape}")
+    print("\nFeatures available:")
+    print(processed_df.columns.tolist())
+    
+    return processed_df
 
 
 

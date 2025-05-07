@@ -26,20 +26,18 @@ class IPLScorePredictor(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         
-        # LSTM layers
-        self.lstm = nn.LSTM(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-            dropout=dropout if num_layers > 1 else 0
-        )
+        # LSTM layers with dropout
+        self.lstm = nn.LSTM(input_size=input_size,
+                           hidden_size=hidden_size,
+                           num_layers=num_layers,
+                           dropout=dropout if num_layers > 1 else 0,
+                           batch_first=True)
         
-        # Fully connected layers for prediction
-        self.fc1 = nn.Linear(hidden_size, hidden_size // 2)
-        self.dropout = nn.Dropout(dropout)
+        # Fully connected layers
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_size // 2, output_size)
+        self.dropout = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(hidden_size, output_size)
         
         logger.info(
             f"Initialized model: input_size={input_size}, "
@@ -59,39 +57,39 @@ class IPLScorePredictor(nn.Module):
         """
         batch_size = x.size(0)
         
-        # Pack padded sequence if sequence lengths are provided
-        if seq_lengths is not None:
-            # Pack the sequence to handle variable length sequences efficiently
-            from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-            x = pack_padded_sequence(x, seq_lengths.cpu(), batch_first=True, enforce_sorted=False)
-        
-        # Initialize hidden state
+        # Initialize hidden states
         h0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(x.data.device if hasattr(x, 'data') else x.device)
         c0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(x.data.device if hasattr(x, 'data') else x.device)
         
         # Forward through LSTM
         out, _ = self.lstm(x, (h0, c0))
         
-        # Unpack if we packed earlier
+        # Handle sequence packing if lengths provided
         if seq_lengths is not None:
+            from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+            x = pack_padded_sequence(x, seq_lengths.cpu(), batch_first=True, enforce_sorted=False)
             out, _ = pad_packed_sequence(out, batch_first=True)
-            
-            # Use the last valid output for each sequence based on its length
-            # Convert seq_lengths to indices tensor of correct type
             indices = (seq_lengths - 1).view(-1, 1).expand(batch_size, self.hidden_size)
-            indices = indices.unsqueeze(1).to(torch.int64).to(out.device) # Ensure indices are on the same device as 'out'
+            indices = indices.unsqueeze(1).to(torch.int64).to(out.device)
             out = out.gather(1, indices).squeeze(1)
         else:
-            # Use the output from the last time step if no sequence lengths
             out = out[:, -1, :]
         
-        # Forward through fully connected layers
+        # Forward through fully connected layers with adjusted activation
         out = self.fc1(out)
         out = self.relu(out)
         out = self.dropout(out)
-        out = self.fc2(out)  # Output contains both runs prediction and wicket logits
+        raw_out = self.fc2(out)
         
-        return out
+        # Split output into runs and wickets
+        runs_out = raw_out[:, 0]
+        wicket_out = raw_out[:, 1]
+        
+        # Apply reasonable constraints on runs (0-36 per over)
+        runs_out = torch.clamp(runs_out, min=0.0, max=36.0)
+        
+        # Combine outputs
+        return torch.cat([runs_out.unsqueeze(1), wicket_out.unsqueeze(1)], dim=1)
 
 class CombinedIPLLoss(nn.Module):
     """Custom loss function for IPL score prediction that combines MSE for runs and BCE for wickets.

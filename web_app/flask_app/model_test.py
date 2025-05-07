@@ -214,7 +214,7 @@ def predict_model1():
         seq_lengths = torch.tensor([1], dtype=torch.long) # Sequence length is 1 for this single prediction
 
         with torch.no_grad():
-            output = model(input_tensor, seq_lengths) # Pass seq_lengths
+            output = model(input_tensor, seq_lengths)
         
         prediction_list = output.tolist()
         
@@ -223,9 +223,21 @@ def predict_model1():
              app.logger.error(error_msg)
              return render_template('result.html', prediction_output=f"Error: {error_msg}")
 
+        # Get raw predictions
         predicted_runs = prediction_list[0][0]
         wicket_logits = prediction_list[0][1]
-        wicket_probability = torch.sigmoid(torch.tensor(wicket_logits)).item() # Apply sigmoid to logits
+        
+        # Apply reasonable run clamping (max 36 runs per over - 6 sixes)
+        predicted_runs = max(0, min(36, predicted_runs))
+        
+        # Adjust prediction based on match context
+        if curr_run_rate_val > 10:  # High scoring match
+            predicted_runs *= 1.2  # Increase prediction by 20%
+        
+        # Round the prediction for display
+        predicted_runs = round(predicted_runs)
+        
+        wicket_probability = torch.sigmoid(torch.tensor(wicket_logits)).item()
 
         prediction_display = (f"Predicted Final Runs: {predicted_runs:.2f}<br>"
                               f"Predicted Wicket Probability (for this state leading to final): {wicket_probability:.2%}")
