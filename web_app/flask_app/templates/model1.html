@@ -38,11 +38,7 @@
 </head>
 <body>
     <div class="container">
-        <!-- The heading can be dynamically set or kept generic if forms are identical -->
-        <!-- For this example, I'll use a generic title. Or you can have Flask pass a title. -->
-        <h2>Predict Score</h2>
-        <!-- The form action will be different for model1.html vs model2.html if they submit to different endpoints -->
-        <!-- If model1.html, action="/predict_model1". If model2.html, action="/predict_model2" -->
+        <h2>Predict Score (Model 1 - 7 Features)</h2>
         <form action="{{ '/predict_model1' if 'model1' in request.path else '/predict_model2' }}" method="post">
             <div class="form-group">
                 <label for="innings">Innings:</label>
@@ -53,31 +49,27 @@
             </div>
             <div class="form-group">
                 <label for="over_num">Over Number (e.g., 5.2 for 5 overs, 2 balls):</label>
-                <input type="number" id="over_num" name="over_num" step="0.1" placeholder="Enter current over" required>
+                <input type="number" id="over_num" name="over_num" step="0.1" min="0" max="19.5" placeholder="Enter current over (e.g., 5.2)" required>
             </div>
             <div class="form-group">
-                <label for="current_score">Current Score:</label>
-                <input type="number" id="current_score" name="current_score" placeholder="Enter current score" required>
+                <label for="current_score">Current Score (Runs):</label>
+                <input type="number" id="current_score" name="current_score" min="0" placeholder="Enter current runs" required>
             </div>
             <div class="form-group">
-                <label for="wickets_fallen">Wickets Fallen:</label>
-                <input type="number" id="wickets_fallen" name="wickets_fallen" placeholder="Enter wickets fallen" required>
+                <label for="batting_team">Batting Team:</label>
+                <input type="text" id="batting_team" name="batting_team" placeholder="Enter batting team name" required>
             </div>
             <div class="form-group">
-                <label for="balls_remaining">Balls Remaining (in match):</label>
-                <input type="number" id="balls_remaining" name="balls_remaining" placeholder="Enter balls remaining" required>
-            </div>
-            <div class="form-group">
-                <label for="venue_avg_score">Venue Average Score:</label>
-                <input type="number" id="venue_avg_score" name="venue_avg_score" placeholder="Enter venue average score" required>
+                <label for="bowling_team">Bowling Team:</label>
+                <input type="text" id="bowling_team" name="bowling_team" placeholder="Enter bowling team name" required>
             </div>
             <div class="form-group hidden-field" id="target_score_group">
-                <label for="target_score">Target Score:</label>
-                <input type="number" id="target_score" name="target_score" placeholder="Enter target score">
+                <label for="target_score">Target Score (Set by 1st Innings):</label>
+                <input type="number" id="target_score" name="target_score" min="0" placeholder="Enter target score">
             </div>
             <div class="form-group hidden-field" id="req_run_rate_group">
                 <label for="req_run_rate">Required Run Rate:</label>
-                <input type="number" id="req_run_rate" name="req_run_rate" step="0.01" placeholder="Enter required run rate">
+                <input type="number" id="req_run_rate" name="req_run_rate" step="0.01" min="0" placeholder="Enter required run rate">
             </div>
             <input type="submit" value="Predict">
         </form>
@@ -102,7 +94,8 @@
                 targetScoreGroup.style.display = 'block';
                 reqRunRateGroup.style.display = 'block';
                 targetScoreInput.required = true;
-                reqRunRateInput.required = true;
+                // reqRunRateInput can be optional if it can be derived, but usually good to have if known
+                reqRunRateInput.required = true; 
             } else {
                 targetScoreGroup.style.display = 'none';
                 reqRunRateGroup.style.display = 'none';
