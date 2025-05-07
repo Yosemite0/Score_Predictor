@@ -1,7 +1,6 @@
 {
     "model_paths": {
-        "lstm": "best_ipl_model.pth",
-        "lr": "lr_model.pkl"
+        "lstm": "best_ipl_model.pth"
     },
     "model_settings": {
         "input_size": 7,
